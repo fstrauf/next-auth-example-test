@@ -1,9 +1,17 @@
 import Layout from "../components/layout"
+import { useSession } from 'next-auth/react';
 
 export default function ClientPage() {
+  const { data: session } = useSession();
+  console.log(session)
   return (
+
     <Layout>
-      <h1>Client Side Rendering</h1>
+      {session?.nftOwned && (
+        <h1>Client Side Rendering</h1>
+
+      )}
+      
       <p>
         This page uses the <strong>useSession()</strong> React Hook in the{" "}
         <strong>&lt;Header/&gt;</strong> component.

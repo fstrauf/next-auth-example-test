@@ -1,6 +1,10 @@
 import Link from "next/link"
 import { signIn, signOut, useSession } from "next-auth/react"
 import styles from "./header.module.css"
+import { useAccount, useConnect, useSignMessage, useDisconnect } from 'wagmi';
+import { useRouter } from 'next/router';
+import { InjectedConnector } from 'wagmi/connectors/injected';
+import axios from 'axios';
 
 // The approach used in this component shows how to build a sign in and sign out
 // component that works on pages which support both client and server side
@@ -9,6 +13,43 @@ export default function Header() {
   const { data: session, status } = useSession()
   const loading = status === "loading"
 
+  const { connectAsync } = useConnect();
+  const { disconnectAsync } = useDisconnect();
+  const { isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
+  const { push } = useRouter();
+
+  const handleAuth = async () => {
+
+    if (isConnected) {
+      await disconnectAsync();
+    }
+
+    const { account, chain } = await connectAsync({ connector: new InjectedConnector() });
+
+    const userData = { address: account, chain: chain.id, network: 'evm' };
+
+    console.log("header")
+    console.log(userData)
+
+    const { data } = await axios.post('/api/auth/request-message', userData, {
+      headers: {
+        'content-type': 'application/json',
+      },
+    });
+
+    const message = data.message;
+
+    console.log(message)
+
+    const signature = await signMessageAsync({ message });
+
+    await signIn('credentials', { message, signature, redirect: false, callbackUrl: '/user' });
+
+  
+  };
+
+
   return (
     <header>
       <noscript>
@@ -16,25 +57,15 @@ export default function Header() {
       </noscript>
       <div className={styles.signedInStatus}>
         <p
-          className={`nojs-show ${
-            !session && loading ? styles.loading : styles.loaded
-          }`}
+          className={`nojs-show ${!session && loading ? styles.loading : styles.loaded
+            }`}
         >
           {!session && (
             <>
               <span className={styles.notSignedInText}>
                 You are not signed in
               </span>
-              <a
-                href={`/api/auth/signin`}
-                className={styles.buttonPrimary}
-                onClick={(e) => {
-                  e.preventDefault()
-                  signIn()
-                }}
-              >
-                Sign in
-              </a>
+              <button className={styles.buttonPrimary} onClick={() => handleAuth()}>Authenticate via Metamask</button>
             </>
           )}
           {session?.user && (

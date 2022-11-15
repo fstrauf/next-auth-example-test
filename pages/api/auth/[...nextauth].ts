@@ -1,65 +1,91 @@
-import NextAuth, { NextAuthOptions } from "next-auth"
-import GoogleProvider from "next-auth/providers/google"
-import FacebookProvider from "next-auth/providers/facebook"
-import GithubProvider from "next-auth/providers/github"
-import TwitterProvider from "next-auth/providers/twitter"
-import Auth0Provider from "next-auth/providers/auth0"
-// import AppleProvider from "next-auth/providers/apple"
-// import EmailProvider from "next-auth/providers/email"
+import CredentialsProvider from 'next-auth/providers/credentials';
+import NextAuth from 'next-auth';
+import Moralis from 'moralis';
+import { EvmChain } from '@moralisweb3/evm-utils';
 
-// For more information on each option (and a full list of options) go to
-// https://next-auth.js.org/configuration/options
-export const authOptions: NextAuthOptions = {
-  // https://next-auth.js.org/configuration/providers/oauth
+export default NextAuth({
   providers: [
-    /* EmailProvider({
-         server: process.env.EMAIL_SERVER,
-         from: process.env.EMAIL_FROM,
-       }),
-    // Temporarily removing the Apple provider from the demo site as the
-    // callback URL for it needs updating due to Vercel changing domains
+    CredentialsProvider({
+      name: 'MoralisAuth',
+      credentials: {
+        message: {
+          label: 'Message',
+          type: 'text',
+          placeholder: '0x0',
+        },
+        signature: {
+          label: 'Signature',
+          type: 'text',
+          placeholder: '0x0',
+        },
+      },
+      async authorize(credentials) {
+        try {
+          // "message" and "signature" are needed for authorisation
+          // we described them in "credentials" above
+          const { message, signature } = credentials;
 
-    Providers.Apple({
-      clientId: process.env.APPLE_ID,
-      clientSecret: {
-        appleId: process.env.APPLE_ID,
-        teamId: process.env.APPLE_TEAM_ID,
-        privateKey: process.env.APPLE_PRIVATE_KEY,
-        keyId: process.env.APPLE_KEY_ID,
+          await Moralis.start({ apiKey: process.env.MORALIS_API_KEY });
+
+          const { address, profileId } = (
+            await Moralis.Auth.verify({ message, signature, network: 'evm' })
+          ).raw;
+
+          const user = { address, profileId, signature };
+          // returning the user object and creating  a session
+          return user;
+        } catch (e) {
+          console.error(e);
+          return null;
+        }
       },
     }),
-    */
-    FacebookProvider({
-      clientId: process.env.FACEBOOK_ID,
-      clientSecret: process.env.FACEBOOK_SECRET,
-    }),
-    GithubProvider({
-      clientId: process.env.GITHUB_ID,
-      clientSecret: process.env.GITHUB_SECRET,
-    }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_ID,
-      clientSecret: process.env.GOOGLE_SECRET,
-    }),
-    TwitterProvider({
-      clientId: process.env.TWITTER_ID,
-      clientSecret: process.env.TWITTER_SECRET,
-    }),
-    Auth0Provider({
-      clientId: process.env.AUTH0_ID,
-      clientSecret: process.env.AUTH0_SECRET,
-      issuer: process.env.AUTH0_ISSUER,
-    }),
   ],
-  theme: {
-    colorScheme: "light",
-  },
+  // adding user info to the user session object
   callbacks: {
-    async jwt({ token }) {
-      token.userRole = "admin"
-      return token
+    async jwt({ token, user }) {
+      user && (token.user = user);
+      return token;
+    },
+    async session({ session, token }) {
+      session.user = token.user;
+
+      const chain = EvmChain.POLYGON;
+
+      if (!session) {
+        return {
+          redirect: {
+            destination: '/signin',
+            permanent: false,
+          },
+        };
+      }
+
+      await Moralis.start({ apiKey: process.env.MORALIS_API_KEY });
+
+      const contract = '0x33e1e8877c94a6524983487e37d9dedaea244b84'
+
+      let nftList = []
+      nftList = await Moralis.EvmApi.nft.getWalletNFTs({
+        address: session.user.address,
+        chain: chain
+      });
+
+      // let nftOwned = nftList.raw.result.find((nfts) => nfts.token_address === contract)
+
+      // console.log(nftOwned) // check for undefined
+
+      session.nftOwned = nftList.raw.result.find((nfts) => nfts.token_address === contract)
+
+      // return {
+      //   props: {
+      //     message:
+      //       nftOwned === undefined ? "Sorry, you don't have our NFT" : "Nice! You have our NFT",
+      //     // nftList: nftList.raw.result
+      //   },
+      // };
+      //do NFT check here
+      return session;
     },
   },
-}
-
-export default NextAuth(authOptions)
+});

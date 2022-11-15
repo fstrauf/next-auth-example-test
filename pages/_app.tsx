@@ -4,15 +4,26 @@ import "./styles.css"
 import type { AppProps } from "next/app"
 import type { Session } from "next-auth"
 
-// Use of the <SessionProvider> is mandatory to allow components that call
-// `useSession()` anywhere in your application to access the `session` object.
+import { createClient, configureChains, defaultChains, WagmiConfig } from 'wagmi';
+import { publicProvider } from 'wagmi/providers/public';
+
+const { provider, webSocketProvider } = configureChains(defaultChains, [publicProvider()]);
+
+const client = createClient({
+  provider,
+  webSocketProvider,
+  autoConnect: true,
+});
+
 export default function App({
   Component,
   pageProps: { session, ...pageProps },
 }: AppProps<{ session: Session }>) {
   return (
-    <SessionProvider session={session}>
-      <Component {...pageProps} />
-    </SessionProvider>
+    <WagmiConfig client={client}>
+      <SessionProvider session={session}>
+        <Component {...pageProps} />
+      </SessionProvider>
+    </WagmiConfig>
   )
 }
